@@ -1,0 +1,25 @@
+# Binaries
+parcel
+parcel-server
+*.exe
+*.out
+
+# Build artifacts
+/bin/
+/dist/
+/tmp/
+
+# Go
+*.test
+*.prof
+vendor/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
