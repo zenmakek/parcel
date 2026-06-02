@@ -1,7 +1,7 @@
 package main
 
-import "fmt"
+import "github.com/zenmakek/parcel/client/cli"
 
 func main() {
-	fmt.Println("Parcel client starting...")
+	cli.Run()
 }
