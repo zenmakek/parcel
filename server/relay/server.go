@@ -1,8 +1,11 @@
 package relay
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -54,12 +57,12 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}()
 
 	conn.SetDeadline(time.Now().Add(5 * time.Minute))
+	reader := bufio.NewReader(conn)
 
-	buf := make([]byte, 1024)
 	for {
-		n, err := conn.Read(buf)
+		message, err := reader.ReadString('\n')
 		if err != nil {
-			if err.Error() == "EOF" {
+			if err == io.EOF {
 				fmt.Printf("[relay] client disconnected cleanly: %s\n", conn.RemoteAddr())
 			} else {
 				fmt.Printf("[relay] read error from %s: %v\n", conn.RemoteAddr(), err)
@@ -67,10 +70,10 @@ func (s *Server) handleConnection(conn net.Conn) {
 			return
 		}
 
-		message := string(buf[:n])
+		message = strings.TrimSpace(message)
 		fmt.Printf("[relay] received from %s: %s\n", conn.RemoteAddr(), message)
 
-		response := fmt.Sprintf("[relay-echo] %s", message)
+		response := fmt.Sprintf("[relay-echo] %s\n", message)
 		conn.Write([]byte(response))
 	}
 }
