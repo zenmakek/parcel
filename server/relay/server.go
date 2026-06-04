@@ -7,6 +7,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/zenmakek/parcel/server/session"
 )
 
 const (
@@ -16,10 +18,13 @@ const (
 
 type Server struct {
 	listener net.Listener
+	registry *session.Registry
 }
 
 func New() *Server {
-	return &Server{}
+	return &Server{
+		registry: session.NewRegistry(),
+	}
 }
 
 func (s *Server) Start() error {
@@ -28,10 +33,8 @@ func (s *Server) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed tos tart relay server: %w", err)
 	}
-
 	s.listener = listener
 	fmt.Printf("[relay] server started on %s\n", address)
-
 	s.acceptLoop()
 	return nil
 }
@@ -43,10 +46,8 @@ func (s *Server) acceptLoop() {
 			fmt.Printf("[relay] error accepting connection: %v\n", err)
 			continue
 		}
-
 		fmt.Printf("[relay] new connection from %s\n", conn.RemoteAddr())
 		go s.handleConnection(conn)
-
 	}
 }
 
@@ -73,7 +74,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 		message = strings.TrimSpace(message)
 		fmt.Printf("[relay] received from %s: %s\n", conn.RemoteAddr(), message)
 
-		response := fmt.Sprintf("[relay-echo] %s\n", message)
+		response := fmt.Sprintf("[relay-ack] received: %s\n", message)
 		conn.Write([]byte(response))
 	}
 }
