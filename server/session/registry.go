@@ -22,6 +22,10 @@ type Session struct {
 	CreatedAt    time.Time
 	ExpiresAt    time.Time
 	Status       string
+	Filename     string
+	Size         int64
+	IsArchive    bool
+	Done         chan struct{}
 }
 
 type Registry struct {
@@ -51,6 +55,7 @@ func (r *Registry) Create(otp string, sender net.Conn) (*Session, error) {
 		CreatedAt:  time.Now(),
 		ExpiresAt:  time.Now().Add(SessionExpiry),
 		Status:     StatusWaiting,
+		Done:       make(chan struct{}),
 	}
 
 	r.sessions[otp] = session
