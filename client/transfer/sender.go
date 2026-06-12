@@ -40,11 +40,20 @@ func SendFile(conn net.Conn, meta *Metadata) error {
 		return fmt.Errorf("failed to decode ack payload: %w", err)
 	}
 
-	fmt.Printf("  [sender] OTP: %s\n", ackPayload.Message)
-	fmt.Println("  [sender] waiting for receiver to join...")
+	otp := ackPayload.Message
+
+	fmt.Println()
+	fmt.Println("  ┌─────────────────────────────┐")
+	fmt.Println("  │                             │")
+	fmt.Printf("  │   Your OTP:   %s        │\n", otp)
+	fmt.Println("  │                             │")
+	fmt.Println("  └─────────────────────────────┘")
+	fmt.Println()
+	fmt.Println("  Share this code with the receiver.")
+	fmt.Println("  Waiting for them to connect...")
 
 	transferInit, err := protocol.Encode(protocol.PacketTransferInit, protocol.TransferInitPayload{
-		OTP:       ackPayload.Message,
+		OTP:       otp,
 		Filename:  meta.Filename,
 		Size:      meta.Size,
 		IsArchive: meta.IsArchive,
@@ -75,7 +84,8 @@ func SendFile(conn net.Conn, meta *Metadata) error {
 		return fmt.Errorf("unexpected packet type: %s", readyPacket.Type)
 	}
 
-	fmt.Println("  [sender] receiver joined, starting transfer...")
+	fmt.Println("  Receiver connected. Transferring...")
+	fmt.Println()
 
 	file, err := os.Open(meta.OriginalPath)
 	if err != nil {
@@ -88,6 +98,6 @@ func SendFile(conn net.Conn, meta *Metadata) error {
 		return fmt.Errorf("failed to stream file: %w", err)
 	}
 
-	fmt.Printf("  [sender] transfer complete: %d bytes sent\n", written)
+	fmt.Printf("  Sent %d bytes.\n", written)
 	return nil
 }
