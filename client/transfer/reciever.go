@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/zenmakek/parcel/client/utils"
 	"github.com/zenmakek/parcel/shared/protocol"
 )
 
@@ -74,7 +75,9 @@ func ReceiveFile(conn net.Conn, otp string, downloadDir string) (string, bool, e
 	}
 	defer outFile.Close()
 
-	received, err := io.CopyN(outFile, conn, initPayload.Size)
+	progress := utils.NewProgressReader(conn, initPayload.Size, "Receiving")
+
+	received, err := io.CopyN(outFile, progress, initPayload.Size)
 	if err != nil && err != io.EOF {
 		return "", false, fmt.Errorf("failed to receive file: %w", err)
 	}

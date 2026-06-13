@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/zenmakek/parcel/client/utils"
 	"github.com/zenmakek/parcel/shared/protocol"
 )
 
@@ -93,7 +94,9 @@ func SendFile(conn net.Conn, meta *Metadata) error {
 	}
 	defer file.Close()
 
-	written, err := io.Copy(conn, file)
+	progress := utils.NewProgressReader(file, meta.Size, "Sending")
+
+	written, err := io.Copy(conn, progress)
 	if err != nil {
 		return fmt.Errorf("failed to stream file: %w", err)
 	}
