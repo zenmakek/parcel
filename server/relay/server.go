@@ -64,28 +64,31 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	helloRaw, err := reader.ReadString('\n')
 	if err != nil {
-		fmt.Printf("[relay] failed to read hello: %v\n", err)
+		fmt.Printf("[relay] failed to read hello from %s: %v\n", conn.RemoteAddr(), err)
 		return
 	}
 
 	helloPacket, err := protocol.Decode(strings.TrimSpace(helloRaw))
 	if err != nil {
-		fmt.Printf("[relay] failed to decode hello: %v\n", err)
+		fmt.Printf("[relay] malformed hello from %s: %v\n", conn.RemoteAddr(), err)
+		sendError(conn, "", "malformed hello packet")
 		return
 	}
 
 	if helloPacket.Type != protocol.PacketHello {
-		fmt.Printf("[relay] unexpected packet, expected HELLO got %s\n", helloPacket.Type)
+		fmt.Printf("[relay] expected HELLO got %s from %s\n", helloPacket.Type, conn.RemoteAddr())
+		sendError(conn, "", "expected HELLO packet")
 		return
 	}
 
 	var helloPayload protocol.HelloPayload
 	if err := protocol.DecodePayload(helloPacket.Payload, &helloPayload); err != nil {
-		fmt.Printf("[relay] failed to decode hello payload: %v\n", err)
+		fmt.Printf("[relay] failed to decode hello payload from %s: %v\n", conn.RemoteAddr(), err)
+		sendError(conn, "", "malformed hello payload")
 		return
 	}
 
-	fmt.Printf("[relay] client identified as: %s\n", helloPayload.Role)
+	fmt.Printf("[relay] client identified as: %s from %s\n", helloPayload.Role, conn.RemoteAddr())
 
 	switch helloPayload.Role {
 	case "sender":
@@ -93,7 +96,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 	case "receiver":
 		s.handleReceiver(conn, reader)
 	default:
-		fmt.Printf("[relay] unknown role: %s\n", helloPayload.Role)
+		fmt.Printf("[relay] unknown role: %s from %s\n", helloPayload.Role, conn.RemoteAddr())
+		sendError(conn, "", "unknown role")
 	}
 }
 
@@ -101,12 +105,14 @@ func (s *Server) handleSender(conn net.Conn, reader *bufio.Reader) {
 	generatedOTP, err := otp.Generate()
 	if err != nil {
 		fmt.Printf("[relay] failed to generate OTP: %v\n", err)
+		sendError(conn, "", "server failed to generate OTP")
 		return
 	}
 
 	sess, err := s.registry.Create(generatedOTP, conn)
 	if err != nil {
 		fmt.Printf("[relay] failed to create session: %v\n", err)
+		sendError(conn, "", "server failed to create session")
 		return
 	}
 
@@ -115,26 +121,28 @@ func (s *Server) handleSender(conn net.Conn, reader *bufio.Reader) {
 	})
 	if err != nil {
 		fmt.Printf("[relay] failed to encode OTP ack: %v\n", err)
+		s.registry.Destroy(generatedOTP)
 		return
 	}
 
 	if _, err := fmt.Fprint(conn, ack); err != nil {
 		fmt.Printf("[relay] failed to send OTP ack: %v\n", err)
+		s.registry.Destroy(generatedOTP)
 		return
 	}
 
-	fmt.Printf("[relay] OTP issued: %s, waiting for transfer init\n", generatedOTP)
+	fmt.Printf("[relay] OTP issued: %s\n", generatedOTP)
 
 	initRaw, err := reader.ReadString('\n')
 	if err != nil {
-		fmt.Printf("[relay] failed to read transfer init: %v\n", err)
+		fmt.Printf("[relay] sender disconnected before transfer init: %v\n", err)
 		s.registry.Destroy(generatedOTP)
 		return
 	}
 
 	initPacket, err := protocol.Decode(strings.TrimSpace(initRaw))
 	if err != nil {
-		fmt.Printf("[relay] failed to decode transfer init: %v\n", err)
+		fmt.Printf("[relay] malformed transfer init: %v\n", err)
 		s.registry.Destroy(generatedOTP)
 		return
 	}
@@ -147,7 +155,7 @@ func (s *Server) handleSender(conn net.Conn, reader *bufio.Reader) {
 
 	var initPayload protocol.TransferInitPayload
 	if err := protocol.DecodePayload(initPacket.Payload, &initPayload); err != nil {
-		fmt.Printf("[relay] failed to decode transfer init payload: %v\n", err)
+		fmt.Printf("[relay] failed to decode transfer init: %v\n", err)
 		s.registry.Destroy(generatedOTP)
 		return
 	}
@@ -156,8 +164,7 @@ func (s *Server) handleSender(conn net.Conn, reader *bufio.Reader) {
 	sess.Size = initPayload.Size
 	sess.IsArchive = initPayload.IsArchive
 
-	fmt.Printf("[relay] transfer init received: %s (%d bytes)\n", initPayload.Filename, initPayload.Size)
-	fmt.Printf("[relay] waiting for receiver to join session: %s\n", generatedOTP)
+	fmt.Printf("[relay] transfer init: %s (%d bytes)\n", initPayload.Filename, initPayload.Size)
 
 	for {
 		if sess.Status == session.StatusConnected {
@@ -191,11 +198,14 @@ func (s *Server) handleSender(conn net.Conn, reader *bufio.Reader) {
 	}
 
 	sess.Status = session.StatusTransferring
-	fmt.Printf("[relay] piping %d bytes from sender to receiver\n", initPayload.Size)
+	fmt.Printf("[relay] piping %d bytes\n", initPayload.Size)
+
+	conn.SetDeadline(time.Time{})
 
 	written, err := io.CopyN(sess.ReceiverConn, conn, initPayload.Size)
 	if err != nil && err != io.EOF {
-		fmt.Printf("[relay] pipe error: %v\n", err)
+		fmt.Printf("[relay] pipe error after %d bytes: %v\n", written, err)
+		sendError(sess.ReceiverConn, generatedOTP, "transfer interrupted by sender disconnect")
 		s.registry.Destroy(generatedOTP)
 		return
 	}
@@ -215,22 +225,25 @@ func (s *Server) handleReceiver(conn net.Conn, reader *bufio.Reader) {
 
 	joinPacket, err := protocol.Decode(strings.TrimSpace(joinRaw))
 	if err != nil {
-		fmt.Printf("[relay] failed to decode OTP join: %v\n", err)
+		fmt.Printf("[relay] malformed OTP join: %v\n", err)
+		sendError(conn, "", "malformed OTP join packet")
 		return
 	}
 
 	if joinPacket.Type != protocol.PacketOTPJoin {
 		fmt.Printf("[relay] expected OTP_JOIN got %s\n", joinPacket.Type)
+		sendError(conn, "", "expected OTP_JOIN packet")
 		return
 	}
 
 	var joinPayload protocol.OTPJoinPayload
 	if err := protocol.DecodePayload(joinPacket.Payload, &joinPayload); err != nil {
 		fmt.Printf("[relay] failed to decode OTP join payload: %v\n", err)
+		sendError(conn, "", "malformed OTP join payload")
 		return
 	}
 
-	fmt.Printf("[relay] receiver attempting to join session: %s\n", joinPayload.OTP)
+	fmt.Printf("[relay] receiver attempting to join: %s\n", joinPayload.OTP)
 
 	sess, err := s.registry.JoinReceiver(joinPayload.OTP, conn)
 	if err != nil {
@@ -260,10 +273,20 @@ func (s *Server) handleReceiver(conn net.Conn, reader *bufio.Reader) {
 		return
 	}
 
-	fmt.Printf("[relay] receiver is ready, waiting for pipe to open\n")
-	fmt.Printf("[relay] receiver is ready, waiting for pipe to open\n")
+	conn.SetDeadline(time.Time{})
 
+	fmt.Printf("[relay] receiver ready, pipe opening\n")
 	<-sess.Done
-
 	fmt.Printf("[relay] receiver goroutine exiting cleanly\n")
+}
+
+func sendError(conn net.Conn, otp string, message string) {
+	errPacket, err := protocol.Encode(protocol.PacketTransferError, protocol.TransferErrorPayload{
+		OTP:     otp,
+		Message: message,
+	})
+	if err != nil {
+		return
+	}
+	fmt.Fprint(conn, errPacket)
 }
