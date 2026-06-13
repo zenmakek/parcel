@@ -54,6 +54,10 @@ func ReceiveFile(conn net.Conn, otp string, downloadDir string) (string, bool, e
 		return "", false, fmt.Errorf("invalid OTP: %s", otp)
 	case protocol.PacketOTPExpired:
 		return "", false, fmt.Errorf("OTP expired: %s", otp)
+	case protocol.PacketTransferError:
+		var errPayload protocol.TransferErrorPayload
+		protocol.DecodePayload(metaPacket.Payload, &errPayload)
+		return "", false, fmt.Errorf("relay error: %s", errPayload.Message)
 	case protocol.PacketTransferInit:
 		// continue
 	default:
