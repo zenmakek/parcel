@@ -1,7 +1,18 @@
 package main
 
-import "github.com/zenmakek/parcel/client/cli"
+import (
+	"fmt"
+	"os"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/zenmakek/parcel/client/tui"
+)
 
 func main() {
-	cli.Run()
+	app := tui.NewApp()
+	p := tea.NewProgram(app, tea.WithAltScreen())
+	if _, err := p.Run(); err != nil {
+		fmt.Println("error:", err)
+		os.Exit(1)
+	}
 }
