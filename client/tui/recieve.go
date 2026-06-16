@@ -111,7 +111,11 @@ func (m ReceiveModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m ReceiveModel) startReceive(otp string) tea.Cmd {
 	return func() tea.Msg {
-		conn, err := net.Dial("tcp", "localhost:8080")
+		relayAddr := os.Getenv("PARCEL_RELAY")
+		if relayAddr == "" {
+			relayAddr = "localhost:8080"
+		}
+		conn, err := net.Dial("tcp", relayAddr)
 		if err != nil {
 			return receiveResultMsg{err: fmt.Errorf("could not connect to relay: %w", err)}
 		}

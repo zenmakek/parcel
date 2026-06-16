@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -143,7 +144,12 @@ func (m SendModel) startSend() tea.Cmd {
 	return func() tea.Msg {
 		meta := m.meta
 
-		conn, err := net.Dial("tcp", "localhost:8080")
+		relayAddr := os.Getenv("PARCEL_RELAY")
+		if relayAddr == "" {
+			relayAddr = "localhost:8080"
+		}
+		conn, err := net.Dial("tcp", relayAddr)
+
 		if err != nil {
 			return sendResultMsg{err: fmt.Errorf("could not connect to relay: %w", err)}
 		}

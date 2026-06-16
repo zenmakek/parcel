@@ -1,0 +1,16 @@
+[Unit]
+Description=Parcel Relay Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/parcel
+ExecStart=/opt/parcel/parcel-server
+Restart=always
+RestartSec=5
+Environment=PARCEL_HOST=0.0.0.0
+Environment=PARCEL_PORT=8080
+
+[Install]
+WantedBy=multi-user.target

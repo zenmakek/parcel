@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strings"
 	"time"
 
@@ -13,10 +14,12 @@ import (
 	"github.com/zenmakek/parcel/shared/protocol"
 )
 
-const (
-	Host = "0.0.0.0"
-	Port = "8080"
-)
+func getEnv(key string, fallback string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return fallback
+}
 
 type Server struct {
 	listener net.Listener
@@ -30,7 +33,10 @@ func New() *Server {
 }
 
 func (s *Server) Start() error {
-	address := fmt.Sprintf("%s:%s", Host, Port)
+	host := getEnv("PARCEL_HOST", "0.0.0.0")
+	port := getEnv("PARCEL_PORT", "8080")
+	address := fmt.Sprintf("%s:%s", host, port)
+
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		return fmt.Errorf("failed to start relay server: %w", err)
