@@ -58,6 +58,10 @@ Files are streamed directly through the relay. Nothing is stored permanently.
 OTPs are 6-digit, single-use, and expire after 5 minutes.
 
 ---
+## Use Default relay
+```bash
+curl -fsSL https://raw.githubusercontent.com/zenmakek/parcel/main/scripts/install.sh | bash
+```
 
 ## Self-host the relay
 
