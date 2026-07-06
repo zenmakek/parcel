@@ -11,4 +11,15 @@ const (
 	PacketOTPExpired       = "OTP_EXPIRED"
 	PacketOTPJoin          = "OTP_JOIN"
 	PacketOTPInvalid       = "OTP_INVALID"
+
+	PacketAnnounce         = "ANNOUNCE"
+	PacketLookup           = "LOOKUP"
+	PacketPeerList         = "PEER_LIST"
+	PacketManifestRequest  = "MANIFEST_REQUEST"
+	PacketManifestResponse = "MANIFEST_RESPONSE"
+	PacketChunkRequest     = "CHUNK_REQUEST"
+	PacketChunkResponse    = "CHUNK_RESPONSE"
+	PacketChunkVerifyFail  = "CHUNK_VERIFY_FAIL"
+	PacketHave             = "HAVE"
+	PacketBitfield         = "BITFIELD"
 )
