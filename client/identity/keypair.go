@@ -101,3 +101,28 @@ func identityDir() (string, error) {
 	}
 	return dir, nil
 }
+
+func LoadFrom(dir string) (*Identity, error) {
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, fmt.Errorf("failed to create directory: %w", err)
+	}
+	privPath := filepath.Join(dir, privateKeyFile)
+	pubPath := filepath.Join(dir, publicKeyFile)
+
+	var kp *KeyPair
+	var err error
+
+	if _, err = os.Stat(privPath); os.IsNotExist(err) {
+		kp, err = generate(privPath, pubPath)
+	} else {
+		kp, err = load(privPath, pubPath)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &Identity{
+		KeyPair: kp,
+		PeerID:  derivePeerID(kp.Public),
+	}, nil
+}
