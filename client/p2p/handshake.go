@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/zenmakek/parcel/client/identity"
 	"github.com/zenmakek/parcel/shared/hash"
@@ -20,6 +21,7 @@ type PeerConn struct {
 		Close() error
 	}
 	reader          *bufio.Reader
+	mu              sync.Mutex
 	RemotePeerID    string
 	RemotePublicKey ed25519.PublicKey
 	LocalIdentity   *identity.Identity
