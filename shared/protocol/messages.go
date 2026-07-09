@@ -178,3 +178,19 @@ func DecodePayload(raw json.RawMessage, target any) error {
 	}
 	return nil
 }
+
+type STUNRequestPayload struct {
+	PeerID string `json:"peer_id"`
+}
+
+type STUNResponsePayload struct {
+	ObservedAddress string `json:"observed_address"`
+}
+
+// HolePunchReadyPayload is sent by the tracker to both peers
+// telling them to connect to each other simultaneously.
+type HolePunchReadyPayload struct {
+	FileHash    string `json:"file_hash"`
+	PeerAddress string `json:"peer_address"` // the other peer's observed address
+	ConnectAt   int64  `json:"connect_at"`   // unix timestamp in ms — when to connect
+}

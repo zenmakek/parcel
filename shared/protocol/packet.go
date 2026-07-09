@@ -22,4 +22,9 @@ const (
 	PacketChunkVerifyFail  = "CHUNK_VERIFY_FAIL"
 	PacketHave             = "HAVE"
 	PacketBitfield         = "BITFIELD"
+
+	PacketSTUNRequest      = "STUN_REQUEST"
+	PacketSTUNResponse     = "STUN_RESPONSE"
+	PacketHolePunchReady   = "HOLE_PUNCH_READY"
+	PacketHolePunchConnect = "HOLE_PUNCH_CONNECT"
 )
