@@ -7,7 +7,9 @@ import (
 )
 
 type HomeModel struct {
-	cursor int
+	cursor    int
+	peerID    string
+	storeSize int64
 }
 
 type menuItem struct {
@@ -16,18 +18,17 @@ type menuItem struct {
 }
 
 var menuItems = []menuItem{
-	{"Send", "Transfer files or folders"},
-	{"Receive", "Enter an OTP to receive"},
+	{"Send", "Share a file or folder"},
+	{"Receive", "Enter a hash to download"},
+	{"Seeds", "View seeding status"},
 	{"Quit", "Exit Parcel"},
 }
 
-func NewHomeModel() HomeModel {
-	return HomeModel{cursor: 0}
+func NewHomeModel(peerID string, storeSize int64) HomeModel {
+	return HomeModel{cursor: 0, peerID: peerID, storeSize: storeSize}
 }
 
-func (m HomeModel) Init() tea.Cmd {
-	return nil
-}
+func (m HomeModel) Init() tea.Cmd { return nil }
 
 func (m HomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -48,6 +49,8 @@ func (m HomeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case 1:
 				return m, navigateTo(screenReceive)
 			case 2:
+				return m, navigateTo(screenSeeds)
+			case 3:
 				return m, tea.Quit
 			}
 		case "q", "ctrl+c":
@@ -66,23 +69,44 @@ func (m HomeModel) View() string {
   ██║     ██║  ██║██║  ██║╚██████╗███████╗███████╗
   ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚══════╝`)
 
-	subtitle := styleSubtitle.Render("  No accounts. No links. Just a code.") + "\n\n"
+	subtitle := styleSubtitle.Render("  No accounts. No links. Just a code.") + "\n"
+
+	peerLine := styleMuted.Render(fmt.Sprintf("  Peer ID: %s", shortID(m.peerID)))
+	storeLine := styleMuted.Render(fmt.Sprintf("  Store:   %s", humanBytes(m.storeSize)))
+	info := peerLine + "\n" + storeLine + "\n\n"
 
 	menu := ""
 	for i, item := range menuItems {
 		cursor := "  "
 		label := styleNormal.Render(item.label)
 		desc := styleMuted.Render("  " + item.description)
-
 		if i == m.cursor {
 			cursor = styleSelected.Render("▶ ")
 			label = styleSelected.Render(item.label)
 		}
-
 		menu += fmt.Sprintf("%s%s\n%s\n\n", cursor, label, desc)
 	}
 
 	help := styleMuted.Render("  ↑/↓ navigate  •  enter select  •  q quit")
+	return banner + "\n" + subtitle + "\n" + info + menu + help
+}
 
-	return banner + "\n" + subtitle + menu + help
+func shortID(id string) string {
+	if len(id) <= 12 {
+		return id
+	}
+	return id[:12] + "..."
+}
+
+func humanBytes(b int64) string {
+	const MB = 1024 * 1024
+	const KB = 1024
+	switch {
+	case b >= MB:
+		return fmt.Sprintf("%.1f MB", float64(b)/MB)
+	case b >= KB:
+		return fmt.Sprintf("%.1f KB", float64(b)/KB)
+	default:
+		return fmt.Sprintf("%d B", b)
+	}
 }

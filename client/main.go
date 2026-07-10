@@ -5,6 +5,8 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/zenmakek/parcel/client/identity"
+	"github.com/zenmakek/parcel/client/store"
 	"github.com/zenmakek/parcel/client/tui"
 )
 
@@ -20,7 +22,21 @@ func main() {
 		os.Setenv("PARCEL_RELAY", "139.59.60.82:8080")
 	}
 
-	app := tui.NewApp()
+	id, err := identity.New()
+	if err != nil {
+		fmt.Println("failed to load identity:", err)
+		os.Exit(1)
+	}
+
+	s, err := store.New()
+	if err != nil {
+		fmt.Println("failed to open store:", err)
+		os.Exit(1)
+	}
+
+	storeSize, _ := s.StoreSize()
+
+	app := tui.NewApp(id.PeerID, storeSize)
 	p := tea.NewProgram(app, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Println("error:", err)
