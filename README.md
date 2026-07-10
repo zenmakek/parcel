@@ -2,52 +2,43 @@
 
 > No accounts. No links. Just a code.
 
-Parcel is an OTP-based TCP file transfer system. Send files and folders between
-devices using a temporary 6-digit code. No cloud storage. No accounts. No browser.
+Parcel is a P2P file transfer system built on content-addressed TCP streaming.  
+Share files using a SHA256 hash — no cloud storage, no accounts, no browser.
 
 ---
 
 ## Install
 
-Download the binary for your platform from [Releases](https://github.com/zenmakek/parcel/releases):
+```bash
+curl -fsSL https://raw.githubusercontent.com/zenmakek/parcel/main/scripts/install.sh | bash
+```
+
+Or download a binary from **[Releases](https://github.com/zenmakek/parcel/releases)**.
 
 | Platform | Binary |
-|---|---|
+| :-------- | :----- |
 | Linux (amd64) | `parcel-linux-amd64` |
 | Linux (arm64) | `parcel-linux-arm64` |
 | macOS (Intel) | `parcel-darwin-amd64` |
 | macOS (Apple Silicon) | `parcel-darwin-arm64` |
 | Windows | `parcel-windows-amd64.exe` |
 
-**Linux / macOS:**
-```bash
-chmod +x parcel-linux-amd64
-./parcel-linux-amd64
-```
-
-**Windows:**
-
-Double-click `parcel-windows-amd64.exe` or run it in PowerShell.
-
-## Use Default relay
-```bash
-curl -fsSL https://raw.githubusercontent.com/zenmakek/parcel/main/scripts/install.sh | bash
-```
-
 ---
 
 ## Usage
 
-**Send a file:**
-1. Run Parcel
-2. Select Send
-3. Enter the file or folder path
-4. Share the 6-digit OTP with the receiver
+### Send
 
-**Receive a file:**
-1. Run Parcel
-2. Select Receive
-3. Enter the OTP
+1. Run `parcel`
+2. Select **Send**
+3. Enter file or folder path
+4. Share the 64-character SHA256 hash with the receiver
+
+### Receive
+
+1. Run `parcel`
+2. Select **Receive**
+3. Enter the hash
 
 Files land in `~/Downloads` automatically.
 
@@ -55,33 +46,52 @@ Files land in `~/Downloads` automatically.
 
 ## How it works
 
-```
-Sender → Relay Server → Receiver
+```text
+Sender hashes file → announces hash to DHT
+        ↓
+Receiver enters hash → DHT returns peer list
+        ↓
+Receiver connects directly to peers
+        ↓
+Chunks downloaded in parallel, each verified by hash
+        ↓
+Receiver becomes a seeder automatically
 ```
 
-Files are streamed directly through the relay. Nothing is stored permanently.
-OTPs are 6-digit, single-use, and expire after 5 minutes.
+### Features
+
+- Content addressing — files identified by SHA256 hash
+- Chunked transfer — 256KB chunks, each independently verified
+- Parallel download — fetch chunks from multiple peers simultaneously
+- NAT traversal — direct connections via TCP hole punching
+- Noise encryption — ChaCha20-Poly1305 on all peer connections
+- Kademlia DHT — decentralized peer discovery, no central server required
+- Relay fallback — DigitalOcean relay for cases where direct connection fails
 
 ---
 
-## Self-host the relay
+## Architecture
+
+```text
+v1.0: Sender → Relay → Receiver (OTP)
+
+v2.0: Sender ↔ DHT ↔ Receiver (hash, direct P2P)
+```
+
+---
+
+## Self-host the server
 
 ```bash
 VPS_IP=your.server.ip ./scripts/deploy.sh
-```
-
-Then point your client at it:
-
-```bash
 export PARCEL_RELAY=your.server.ip:8080
-./parcel-linux-amd64
 ```
 
 ---
 
 ## Build from source
 
-Requires Go 1.21+.
+Requires **Go 1.21+**.
 
 ```bash
 git clone https://github.com/zenmakek/parcel.git
@@ -93,22 +103,16 @@ go run ./client/main.go
 
 ## Roadmap
 
-- [ ] TLS encryption
-- [ ] SHA256 integrity verification
-- [ ] Resumable transfers
+- [x] OTP-based relay transfer (v1.0)
+- [x] Content addressing (SHA256)
+- [x] Chunk engine + resumable transfers
+- [x] Peer identity (Ed25519)
+- [x] Tracker server
+- [x] Direct peer connections
+- [x] NAT traversal (STUN + hole punching)
+- [x] Parallel chunk download
+- [x] Seeding
+- [x] Noise encryption
+- [x] Kademlia DHT
 - [ ] LAN auto-discovery
-- [ ] P2P mode
-
----
-
-## Philosophy
-
-Parcel should be lightweight, fast, open source, and simple.
-
-Parcel avoids account requirements, complex setup, vendor lock-in, permanent cloud storage, and heavy GUI dependencies.
-
----
-
-## License
-
-MIT
+- [ ] Mobile clients

@@ -15,19 +15,23 @@ fi
 echo "[deploy] building relay server for Linux amd64..."
 GOOS=linux GOARCH=amd64 go build -o bin/parcel-server-linux ./server/main.go
 
-echo "[deploy] creating deploy directory on VPS..."
-ssh -p "$VPS_PORT" "$VPS_USER@$VPS_IP" "mkdir -p $DEPLOY_DIR"
-
 echo "[deploy] uploading binary..."
+ssh -p "$VPS_PORT" "$VPS_USER@$VPS_IP" "mkdir -p $DEPLOY_DIR"
 scp -P "$VPS_PORT" bin/parcel-server-linux "$VPS_USER@$VPS_IP:$DEPLOY_DIR/parcel-server"
-
-echo "[deploy] setting permissions..."
-ssh -p "$VPS_PORT" "$VPS_USER@$VPS_IP" "chmod +x $DEPLOY_DIR/parcel-server"
 
 echo "[deploy] uploading systemd service..."
 scp -P "$VPS_PORT" scripts/parcel-relay.service "$VPS_USER@$VPS_IP:/etc/systemd/system/parcel-relay.service"
 
-echo "[deploy] enabling and starting service..."
-ssh -p "$VPS_PORT" "$VPS_USER@$VPS_IP" "systemctl daemon-reload && systemctl enable parcel-relay && systemctl restart parcel-relay"
+echo "[deploy] restarting service..."
+ssh -p "$VPS_PORT" "$VPS_USER@$VPS_IP" "
+    chmod +x $DEPLOY_DIR/parcel-server
+    systemctl daemon-reload
+    systemctl enable parcel-relay
+    systemctl restart parcel-relay
+    ufw allow 8080/tcp
+    ufw allow 9090/tcp
+    ufw allow 3478/tcp
+    ufw reload
+"
 
-echo "[deploy] done. relay running at $VPS_IP:8080"
+echo "[deploy] done. relay+tracker+stun running at $VPS_IP"
