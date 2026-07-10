@@ -10,6 +10,7 @@ const (
 	screenHome screen = iota
 	screenSend
 	screenReceive
+	screenSeeds
 )
 
 type App struct {
@@ -17,16 +18,18 @@ type App struct {
 	home    HomeModel
 	send    SendModel
 	receive ReceiveModel
+	seeds   SeedsModel
 	width   int
 	height  int
 }
 
-func NewApp() App {
+func NewApp(peerID string, storeSize int64) App {
 	return App{
 		current: screenHome,
-		home:    NewHomeModel(),
+		home:    NewHomeModel(peerID, storeSize),
 		send:    NewSendModel(),
 		receive: NewReceiveModel(),
+		seeds:   NewSeedsModel(),
 	}
 }
 
@@ -50,6 +53,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.current = screenSend
 		case screenReceive:
 			a.current = screenReceive
+		case screenSeeds:
+			a.current = screenSeeds
 		}
 		return a, nil
 	}
@@ -67,6 +72,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, cmd := a.receive.Update(msg)
 		a.receive = updated.(ReceiveModel)
 		return a, cmd
+	case screenSeeds:
+		updated, cmd := a.seeds.Update(msg)
+		a.seeds = updated.(SeedsModel)
+		return a, cmd
 	}
 
 	return a, nil
@@ -78,6 +87,8 @@ func (a App) View() string {
 		return a.send.View()
 	case screenReceive:
 		return a.receive.View()
+	case screenSeeds:
+		return a.seeds.View()
 	default:
 		return a.home.View()
 	}

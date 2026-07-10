@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/zenmakek/parcel/client/archive"
 	"github.com/zenmakek/parcel/client/transfer"
+	"github.com/zenmakek/parcel/shared/hash"
 )
 
 type sendState int
@@ -17,8 +18,7 @@ type sendState int
 const (
 	sendStateInput sendState = iota
 	sendStateConfirm
-	sendStateConnecting
-	sendStateWaitingOTP
+	sendStateHashing
 	sendStateWaitingReceiver
 	sendStateTransferring
 	sendStateDone
@@ -26,26 +26,23 @@ const (
 )
 
 type SendModel struct {
-	state     sendState
-	input     textinput.Model
-	meta      *transfer.Metadata
-	otp       string
-	errorMsg  string
-	progress  float64
+	state    sendState
+	input    textinput.Model
+	meta     *transfer.Metadata
+	fileHash string
+	errorMsg string
 	bytesSent int64
-	confirm   string
+	confirm  string
 }
 
-type sendResultMsg struct {
-	err error
+type hashDoneMsg struct {
+	fileHash string
+	err      error
 }
 
-type otpReceivedMsg struct {
-	otp string
-}
-
-type transferDoneMsg struct {
+type sendDoneMsg struct {
 	bytes int64
+	err   error
 }
 
 func NewSendModel() SendModel {
@@ -54,20 +51,13 @@ func NewSendModel() SendModel {
 	ti.Focus()
 	ti.Width = 40
 	ti.CharLimit = 256
-
-	return SendModel{
-		state: sendStateInput,
-		input: ti,
-	}
+	return SendModel{state: sendStateInput, input: ti}
 }
 
-func (m SendModel) Init() tea.Cmd {
-	return textinput.Blink
-}
+func (m SendModel) Init() tea.Cmd { return textinput.Blink }
 
 func (m SendModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -95,8 +85,8 @@ func (m SendModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			case sendStateConfirm:
 				if m.confirm == "y" || m.confirm == "Y" {
-					m.state = sendStateConnecting
-					return m, m.startSend()
+					m.state = sendStateHashing
+					return m, m.hashFile()
 				}
 				return m, navigateTo(screenHome)
 
@@ -115,21 +105,24 @@ func (m SendModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case otpReceivedMsg:
-		m.otp = msg.otp
-		m.state = sendStateWaitingReceiver
-		return m, nil
-
-	case transferDoneMsg:
-		m.bytesSent = msg.bytes
-		m.state = sendStateDone
-		return m, nil
-
-	case sendResultMsg:
+	case hashDoneMsg:
 		if msg.err != nil {
 			m.errorMsg = msg.err.Error()
 			m.state = sendStateError
+			return m, nil
 		}
+		m.fileHash = msg.fileHash
+		m.state = sendStateWaitingReceiver
+		return m, m.startSeed()
+
+	case sendDoneMsg:
+		if msg.err != nil {
+			m.errorMsg = msg.err.Error()
+			m.state = sendStateError
+			return m, nil
+		}
+		m.bytesSent = msg.bytes
+		m.state = sendStateDone
 		return m, nil
 	}
 
@@ -140,44 +133,55 @@ func (m SendModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m SendModel) startSend() tea.Cmd {
+func (m SendModel) hashFile() tea.Cmd {
 	return func() tea.Msg {
-		meta := m.meta
+		path := m.meta.OriginalPath
 
+		if m.meta.IsArchive {
+			archivePath := archive.ArchivePath(path)
+			if err := archive.CompressFolder(path, archivePath); err != nil {
+				return hashDoneMsg{err: err}
+			}
+			path = archivePath
+		}
+
+		h, err := hash.HashFile(path)
+		if err != nil {
+			return hashDoneMsg{err: err}
+		}
+		return hashDoneMsg{fileHash: h}
+	}
+}
+
+func (m SendModel) startSeed() tea.Cmd {
+	return func() tea.Msg {
 		relayAddr := os.Getenv("PARCEL_RELAY")
 		if relayAddr == "" {
 			relayAddr = "localhost:8080"
 		}
+
 		conn, err := net.Dial("tcp", relayAddr)
-
 		if err != nil {
-			return sendResultMsg{err: fmt.Errorf("could not connect to relay: %w", err)}
+			return sendDoneMsg{err: fmt.Errorf("could not connect to relay: %w", err)}
 		}
+		defer conn.Close()
 
+		meta := m.meta
 		if meta.IsArchive {
 			archivePath := archive.ArchivePath(meta.OriginalPath)
-			if err := archive.CompressFolder(meta.OriginalPath, archivePath); err != nil {
-				conn.Close()
-				return sendResultMsg{err: fmt.Errorf("failed to archive folder: %w", err)}
-			}
-			defer archive.CleanupArchive(archivePath)
-
 			newMeta, err := transfer.Inspect(archivePath)
 			if err != nil {
-				conn.Close()
-				return sendResultMsg{err: err}
+				return sendDoneMsg{err: err}
 			}
 			newMeta.IsArchive = true
 			meta = newMeta
 		}
 
 		if err := transfer.SendFile(conn, meta); err != nil {
-			conn.Close()
-			return sendResultMsg{err: err}
+			return sendDoneMsg{err: err}
 		}
 
-		conn.Close()
-		return transferDoneMsg{bytes: meta.Size}
+		return sendDoneMsg{bytes: meta.Size}
 	}
 }
 
@@ -197,31 +201,26 @@ func (m SendModel) View() string {
 			fileType = "Folder → will archive as .tar.gz"
 		}
 		info := styleBox.Render(
-			styleMuted.Render("Name  : ") + styleNormal.Render(m.meta.Filename) + "\n" +
-				styleMuted.Render("Size  : ") + styleNormal.Render(m.meta.HumanSize()) + "\n" +
-				styleMuted.Render("Type  : ") + styleNormal.Render(fileType),
+			styleMuted.Render("Name : ") + styleNormal.Render(m.meta.Filename) + "\n" +
+				styleMuted.Render("Size : ") + styleNormal.Render(m.meta.HumanSize()) + "\n" +
+				styleMuted.Render("Type : ") + styleNormal.Render(fileType),
 		)
 		prompt := stylePrompt.Render("  Send this? [y/n]: ") + m.confirm
 		return header + info + "\n" + prompt + footer
 
-	case sendStateConnecting:
-		return header + styleMuted.Render("  Connecting to relay...") + footer
-
-	case sendStateWaitingOTP:
-		return header + styleMuted.Render("  Waiting for OTP...") + footer
+	case sendStateHashing:
+		return header + styleMuted.Render("  Computing file hash...") + footer
 
 	case sendStateWaitingReceiver:
-		otpBox := styleBox.Render(
-			styleMuted.Render("Your OTP\n\n") +
-				styleOTP.Render(m.otp) + "\n\n" +
-				styleMuted.Render("Share this code with the receiver"),
+		hashBox := styleBox.Render(
+			styleMuted.Render("Share this hash\n\n") +
+				styleOTP.Render(m.fileHash[:32]+"\n"+m.fileHash[32:]) + "\n\n" +
+				styleMuted.Render("Receiver enters this to download"),
 		)
-		status := styleMuted.Render("  Waiting for receiver to connect...")
-		return header + otpBox + "\n" + status + footer
+		return header + hashBox + "\n" + styleMuted.Render("  Seeding...") + footer
 
 	case sendStateTransferring:
-		bar := renderProgressBar(m.progress, 30)
-		return header + bar + footer
+		return header + styleMuted.Render("  Transferring...") + footer
 
 	case sendStateDone:
 		msg := styleSuccess.Render("  ✓ Transfer complete!") + "\n" +
@@ -237,20 +236,4 @@ func (m SendModel) View() string {
 	}
 
 	return header + footer
-}
-
-func renderProgressBar(percent float64, width int) string {
-	filled := int(percent * float64(width))
-	if filled > width {
-		filled = width
-	}
-	empty := width - filled
-
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
-	style := styleProgressBar
-	if percent >= 1.0 {
-		style = styleProgressDone
-	}
-
-	return fmt.Sprintf("  %s %5.1f%%", style.Render("["+bar+"]"), percent*100)
 }
