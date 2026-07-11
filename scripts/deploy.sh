@@ -17,10 +17,10 @@ GOOS=linux GOARCH=amd64 go build -o bin/parcel-server-linux ./server/main.go
 
 echo "[deploy] uploading binary..."
 ssh -p "$VPS_PORT" "$VPS_USER@$VPS_IP" "mkdir -p $DEPLOY_DIR"
-scp -P "$VPS_PORT" bin/parcel-server-linux "$VPS_USER@$VPS_IP:$DEPLOY_DIR/parcel-server"
+rsync -avz -e "ssh -p $VPS_PORT" bin/parcel-server-linux "$VPS_USER@$VPS_IP:$DEPLOY_DIR/parcel-server"
 
 echo "[deploy] uploading systemd service..."
-scp -P "$VPS_PORT" scripts/parcel-relay.service "$VPS_USER@$VPS_IP:/etc/systemd/system/parcel-relay.service"
+rsync -avz -e "ssh -p $VPS_PORT" scripts/parcel-relay.service "$VPS_USER@$VPS_IP:/etc/systemd/system/parcel-relay.service"
 
 echo "[deploy] restarting service..."
 ssh -p "$VPS_PORT" "$VPS_USER@$VPS_IP" "
